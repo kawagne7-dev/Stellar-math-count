@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Stellar Math League — Fuel Run</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:wght@300;400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --hull:#0c1220;--hull-light:#151f35;--hull-accent:#1a2845;
+  --panel:#0a0f1a;--panel-border:#1e3050;
+  --cyan:#3ac8ff;--cyan-dim:rgba(58,200,255,0.3);
+  --orange:#ff8a3a;--orange-dim:rgba(255,138,58,0.3);
+  --green:#3aff8a;--green-dim:rgba(58,255,138,0.3);
+  --red:#ff3a5c;--red-dim:rgba(255,58,92,0.3);
+  --text:#c8d8f0;--text-dim:#5a7090;--text-bright:#e8f0ff;
+  --font-display:'Orbitron',monospace;--font-body:'Exo 2',sans-serif;
+}
+html,body{height:100%;background:#000;color:var(--text);font-family:var(--font-body);overflow:hidden;user-select:none}
+.game{display:flex;flex-direction:column;height:100vh}
+
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--hull);border-bottom:1px solid var(--panel-border);z-index:10;flex-shrink:0}
+.rank-badge{font-family:var(--font-display);font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--cyan);background:rgba(58,200,255,0.06);border:1px solid rgba(58,200,255,0.15);border-radius:4px;padding:4px 10px}
+.mission-label{font-size:12px;color:var(--text-dim)}.mission-label strong{color:var(--text)}
+.points-display{font-family:var(--font-display);font-size:14px;font-weight:600;color:var(--green)}
+.points-display span{color:var(--text-dim);font-size:11px;font-weight:400;margin-right:4px}
+.audio-controls{display:flex;align-items:center;gap:8px}
+.audio-btn{
+  width:28px;height:28px;border:none;border-radius:6px;cursor:pointer;
+  background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;font-size:14px;color:var(--text-dim);
+}
+.audio-btn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.audio-btn.active{color:var(--cyan);background:rgba(58,200,255,0.08)}
+.audio-btn.muted{color:var(--red);opacity:0.5}
+.vol-slider{
+  width:60px;height:4px;-webkit-appearance:none;appearance:none;
+  background:rgba(255,255,255,0.08);border-radius:2px;outline:none;cursor:pointer;
+}
+.vol-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--cyan);cursor:pointer;
+}
+
+.viewport{flex:1;position:relative;overflow:hidden;background:#020510}
+/* Cockpit window frame — left and right pillars */
+.viewport::before,.viewport::after{
+  content:'';position:absolute;top:0;bottom:0;width:28px;z-index:4;pointer-events:none;
+}
+.viewport::before{
+  left:0;
+  background:linear-gradient(90deg,rgba(20,30,45,0.95) 0%,rgba(20,30,45,0.7) 50%,transparent 100%);
+  border-right:1px solid rgba(58,100,140,0.1);
+}
+.viewport::after{
+  right:0;
+  background:linear-gradient(-90deg,rgba(20,30,45,0.95) 0%,rgba(20,30,45,0.7) 50%,transparent 100%);
+  border-left:1px solid rgba(58,100,140,0.1);
+}
+/* HUD overlay */
+.hud{position:absolute;inset:0;pointer-events:none;z-index:3}
+.hud-corner{position:absolute;width:40px;height:40px}
+.hud-corner.tl{top:8px;left:34px;border-top:1px solid rgba(58,200,255,0.12);border-left:1px solid rgba(58,200,255,0.12)}
+.hud-corner.tr{top:8px;right:34px;border-top:1px solid rgba(58,200,255,0.12);border-right:1px solid rgba(58,200,255,0.12)}
+.hud-corner.bl{bottom:8px;left:34px;border-bottom:1px solid rgba(58,200,255,0.12);border-left:1px solid rgba(58,200,255,0.12)}
+.hud-corner.br{bottom:8px;right:34px;border-bottom:1px solid rgba(58,200,255,0.12);border-right:1px solid rgba(58,200,255,0.12)}
+.hud-heading{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  font-family:var(--font-display);font-size:8px;letter-spacing:0.15em;
+  color:rgba(58,200,255,0.25);text-transform:uppercase;
+}
+.hud-distance{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  font-family:var(--font-display);font-size:7px;letter-spacing:0.1em;
+  color:rgba(58,200,255,0.2);text-transform:uppercase;
+}
+/* Center crosshair */
+.hud-crosshair{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:20px;height:20px;
+}
+.hud-crosshair::before,.hud-crosshair::after{
+  content:'';position:absolute;background:rgba(58,200,255,0.08);
+}
+.hud-crosshair::before{width:1px;height:100%;left:50%;top:0}
+.hud-crosshair::after{height:1px;width:100%;top:50%;left:0}
+#stars{width:100%;height:100%;display:block}
+
+/* Relay station */
+.relay{position:absolute;z-index:3;transition:all 1s ease;pointer-events:none}
+.relay-body{
+  width:100%;height:100%;
+  border:2px solid rgba(58,200,255,0.4);border-radius:4px;
+  background:rgba(58,200,255,0.06);position:relative;
+  animation:relay-spin 8s linear infinite;
+}
+@keyframes relay-spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.relay-dot{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--cyan)}
+.relay-label{
+  position:absolute;left:50%;bottom:-16px;transform:translateX(-50%);
+  font-family:var(--font-display);font-size:8px;color:var(--cyan-dim);
+  letter-spacing:0.08em;white-space:nowrap;
+}
+
+.planet{
+  position:absolute;
+  transition:width 0.8s ease,height 0.8s ease;z-index:1;
+  overflow:visible;pointer-events:none;opacity:0;
+}
+.planet canvas{display:none}
+
+/* ─── COCKPIT ─── */
+.cockpit{
+  flex-shrink:0;min-height:240px;
+  position:relative;z-index:5;
+  display:flex;align-items:stretch;
+  background:linear-gradient(180deg,#1a2a3e,var(--panel) 20%,#0a1018);
+  border-top:3px solid #3a5a7a;
+  perspective:800px;
+}
+/* Pronounced cockpit arch — curves up from sides to center */
+.cockpit::before{
+  content:'';position:absolute;top:-60px;left:-2%;right:-2%;height:64px;
+  background:linear-gradient(180deg,transparent 0%,rgba(0,0,0,0.3) 30%,rgba(10,16,24,0.85) 65%,#1a2a3e 100%);
+  border-radius:50% 50% 0 0 / 100% 100% 0 0;
+  pointer-events:none;
+  border-top:2px solid rgba(58,100,140,0.2);
+}
+/* Instrument glow under the arch */
+.cockpit::after{
+  content:'';position:absolute;top:0;left:15%;right:15%;height:4px;
+  background:linear-gradient(90deg,transparent,rgba(58,200,255,0.2),rgba(255,138,58,0.12),rgba(58,200,255,0.2),transparent);
+  pointer-events:none;
+  border-radius:0 0 4px 4px;
+}
+
+/* Relay supply (left panel — angled) */
+.fuel-bay{
+  flex:1;padding:14px 16px;display:flex;flex-direction:column;
+  border-right:1px solid rgba(58,100,140,0.15);
+  /* Slight 3D tilt — left panel angles away */
+  transform:rotateY(2deg);
+  transform-origin:right center;
+  background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent,rgba(0,0,0,0.1));
+}
+.bay-label{font-family:var(--font-display);font-size:8px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px}
+.pellet-area{
+  flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;
+  padding:10px;
+  background:rgba(0,0,0,0.2);
+  border:1px solid rgba(58,100,140,0.12);border-radius:10px;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,0.3),inset 0 -1px 0 rgba(255,255,255,0.02);
+}
+
+.pellet{
+  width:34px;height:34px;border-radius:50%;cursor:grab;
+  background:radial-gradient(circle at 35% 35%,#ffcc44,var(--orange),#cc5500);
+  box-shadow:0 2px 8px rgba(255,138,58,0.3),inset 0 -2px 4px rgba(0,0,0,0.3);
+  transition:transform 0.15s,opacity 0.15s;touch-action:none;flex-shrink:0;
+}
+.pellet-loading{transform:scale(0);opacity:0}
+.pellet-loaded{animation:pellet-pop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards}
+@keyframes pellet-pop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:1}}
+.pellet:hover{transform:scale(1.08)}
+.pellet.dragging{opacity:0.3;transform:scale(0.9)}
+.pellet.used{opacity:0.1;transform:scale(0.5);pointer-events:none}
+
+/* Engine section — center console, elevated */
+.engine-section{
+  width:260px;display:flex;flex-direction:column;align-items:center;
+  padding:12px 16px;gap:8px;
+  /* Center panel pops forward */
+  transform:rotateX(-1deg) translateZ(8px);
+  transform-origin:center top;
+  background:linear-gradient(180deg,rgba(30,50,70,0.6),rgba(10,20,35,0.8));
+  border-left:1px solid rgba(58,100,140,0.1);
+  border-right:1px solid rgba(58,100,140,0.1);
+  box-shadow:0 -4px 20px rgba(0,0,0,0.3),0 2px 15px rgba(58,200,255,0.03);
+}
+.fuel-needed{font-family:var(--font-display);font-size:9px;letter-spacing:0.1em;color:var(--text-dim);text-transform:uppercase}
+.fuel-needed b{font-size:22px;color:var(--orange);vertical-align:middle;margin:0 3px;text-shadow:0 0 8px rgba(255,138,58,0.3)}
+
+.chamber-zone{
+  width:180px;height:120px;border-radius:14px;
+  border:2px dashed rgba(255,138,58,0.2);
+  background:rgba(255,138,58,0.02);
+  display:flex;flex-wrap:wrap;align-content:center;justify-content:center;gap:5px;
+  padding:10px;position:relative;transition:border-color 0.3s,box-shadow 0.3s;
+  box-shadow:inset 0 2px 10px rgba(0,0,0,0.3),inset 0 -1px 0 rgba(255,255,255,0.02);
+}
+.chamber-zone.hover{border-color:var(--orange);box-shadow:inset 0 2px 10px rgba(0,0,0,0.3),0 0 15px var(--orange-dim)}
+.chamber-zone.correct{border-color:var(--green);box-shadow:inset 0 2px 10px rgba(0,0,0,0.3),0 0 20px var(--green-dim);border-style:solid}
+.chamber-zone.wrong{border-color:var(--red);box-shadow:inset 0 2px 10px rgba(0,0,0,0.3),0 0 15px var(--red-dim);animation:shake 0.4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+
+.chamber-pellet{
+  width:28px;height:28px;border-radius:50%;cursor:pointer;
+  background:radial-gradient(circle at 35% 35%,#ffcc44,var(--orange),#cc5500);
+  box-shadow:0 1px 6px rgba(255,138,58,0.4);
+  animation:dropIn 0.25s ease;
+}
+@keyframes dropIn{0%{transform:scale(0);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+.chamber-pellet:hover{transform:scale(1.1);box-shadow:0 1px 10px rgba(255,138,58,0.6)}
+
+.ignite-btn{
+  font-family:var(--font-display);font-size:11px;font-weight:700;
+  letter-spacing:0.08em;text-transform:uppercase;
+  padding:10px 28px;border:none;border-radius:8px;
+  background:linear-gradient(135deg,#2a5a8a,#1a3a5a);color:var(--cyan);
+  cursor:pointer;transition:all 0.15s;
+  box-shadow:0 2px 10px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.ignite-btn:hover{background:linear-gradient(135deg,#3a7aaa,#2a5a7a);transform:translateY(-1px);box-shadow:0 4px 16px rgba(58,200,255,0.2)}
+.ignite-btn:active{transform:translateY(0)}
+.ignite-btn.firing{background:linear-gradient(135deg,var(--orange),#cc5500);color:#fff;animation:ignite-glow 0.6s ease infinite}
+@keyframes ignite-glow{0%,100%{box-shadow:0 0 10px var(--orange-dim)}50%{box-shadow:0 0 25px rgba(255,138,58,0.5)}}
+
+.chamber-feedback{
+  font-size:11px;font-weight:600;min-height:16px;text-align:center;
+  transition:color 0.3s;
+}
+
+/* Status panel (right — angled) */
+.status-panel{
+  flex:1;padding:14px 16px;display:flex;flex-direction:column;gap:6px;
+  border-left:1px solid rgba(58,100,140,0.15);
+  /* Slight 3D tilt — right panel angles away */
+  transform:rotateY(-2deg);
+  transform-origin:left center;
+  background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent,rgba(0,0,0,0.1));
+}
+.stat-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.stat-label{color:var(--text-dim);font-size:9px;text-transform:uppercase;letter-spacing:0.06em}
+.stat-val{font-family:var(--font-display);font-size:12px;font-weight:600}
+.level-bar{height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;margin-top:3px}
+.level-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:3px;transition:width 0.5s ease}
+.refuel-msg{font-size:10px;color:var(--cyan-dim);font-style:italic;line-height:1.4;margin-top:auto;padding-top:6px;border-top:1px solid rgba(58,100,140,0.1)}
+
+.pellet-ghost{position:fixed;width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffee66,var(--orange),#cc5500);box-shadow:0 4px 20px rgba(255,138,58,0.5);pointer-events:none;z-index:100;transform:translate(-50%,-50%);display:none}
+.warp-flash{position:fixed;inset:0;background:white;z-index:40;opacity:0;pointer-events:none;transition:opacity 0.15s}
+.warp-flash.flash{opacity:0.3;transition:opacity 0.05s}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:50;opacity:0;pointer-events:none;transition:opacity 0.4s}
+.overlay.show{opacity:1;pointer-events:all}
+.overlay-card{background:var(--hull-light);border:1px solid var(--panel-border);border-radius:16px;padding:32px 40px;text-align:center;max-width:440px;box-shadow:0 0 60px rgba(58,200,255,0.1)}
+.overlay-card h2{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--cyan);margin-bottom:8px;letter-spacing:0.05em}
+.overlay-card p{font-size:14px;color:var(--text);line-height:1.7;margin-bottom:16px}
+.overlay-card button{font-family:var(--font-display);font-size:12px;font-weight:600;padding:12px 28px;border:none;border-radius:8px;background:var(--cyan);color:#041e1c;cursor:pointer;letter-spacing:0.05em;transition:all 0.15s}
+.overlay-card button:hover{background:#5ad8ff;transform:translateY(-2px);box-shadow:0 4px 20px rgba(58,200,255,0.3)}
+
+@media(max-width:700px){
+  .cockpit{min-height:auto;flex-wrap:wrap;perspective:none}
+  .fuel-bay,.status-panel{transform:none;min-height:80px}
+  .engine-section{width:100%;flex-direction:row;flex-wrap:wrap;height:auto;padding:8px;transform:none}
+  .chamber-zone{width:140px;height:100px}
+}
+</style>
+</head>
+<body>
+<div class="game">
+  <div class="top-bar">
+    <div class="rank-badge">Cadet</div>
+    <div class="mission-label">Mission: <strong>Fuel Run Alpha</strong></div>
+    <div class="points-display"><span>PTS</span> <span id="pts">0</span> / <span id="pts_goal">50</span></div>
+    <div class="audio-controls">
+      <button class="audio-btn active" id="sfx_btn" onclick="toggleSFX()" title="Sound Effects">🔊</button>
+      <button class="audio-btn active" id="music_btn" onclick="toggleMusic()" title="Music">♪</button>
+      <input type="range" class="vol-slider" id="vol_slider" min="0" max="100" value="60" oninput="setVolume(this.value)" title="Volume">
+    </div>
+  </div>
+
+  <div class="viewport" id="viewport">
+    <canvas id="stars"></canvas>
+    <div class="planet" id="planet" style="width:10px;height:10px;bottom:60%;left:50%;transform:translateX(-50%);position:absolute">
+      <canvas id="planet_canvas"></canvas>
+    </div>
+    <div class="hud">
+      <div class="hud-corner tl"></div>
+      <div class="hud-corner tr"></div>
+      <div class="hud-corner bl"></div>
+      <div class="hud-corner br"></div>
+      <div class="hud-heading" id="hud_heading">HDG 047 · Kepler Approach</div>
+      <div class="hud-distance" id="hud_distance">Distance: calculating...</div>
+      <div class="hud-crosshair"></div>
+    </div>
+  </div>
+
+  <div class="cockpit">
+    <div class="fuel-bay">
+      <div class="bay-label">Relay Supply</div>
+      <div class="pellet-area" id="pellet_area"></div>
+    </div>
+
+    <div class="engine-section">
+      <div class="bay-label" style="color:rgba(255,138,58,0.5)">Reactor</div>
+      <div class="fuel-needed">Fuel Needed: <b id="fuel_target">0</b></div>
+      <div class="chamber-zone" id="chamber"></div>
+      <button class="ignite-btn" id="ignite_btn" onclick="attemptIgnite()">Ignite Engines</button>
+      <div class="chamber-feedback" id="feedback">&nbsp;</div>
+    </div>
+
+    <div class="status-panel">
+      <div><div class="stat-label">Relay Station</div><div class="stat-val" style="color:var(--cyan)" id="wp_label">1 of 8</div></div>
+      <div><div class="stat-label">Level Progress</div><div class="level-bar"><div class="level-fill" id="level_fill" style="width:0%"></div></div></div>
+      <div><div class="stat-label">Last Score</div><div class="stat-val" style="color:var(--green)" id="last_score">\u2014</div></div>
+      <div><div class="stat-label">Speed</div><div class="stat-val" id="speed_val" style="color:var(--orange)">Docked</div></div>
+      <div class="refuel-msg" id="refuel_msg">Relay stations harvest hydrogen from solar winds and compress it into fuel pellets. Load the correct amount to jump.</div>
+    </div>
+  </div>
+</div>
+
+<div class="pellet-ghost" id="ghost"></div>
+<div class="warp-flash" id="warp_flash"></div>
+
+<div class="overlay show" id="intro_overlay">
+  <div class="overlay-card">
+    <h2>Stellar Math League</h2>
+    <p>Welcome, Cadet. Your mission: navigate between relay stations to reach Kepler Station. Each jump requires exactly the right amount of fuel. Load pellets into the engine chamber to match the number shown, then ignite. Quick, accurate fueling earns more points.</p>
+    <button onclick="startMission()">Begin Mission</button>
+  </div>
+</div>
+
+<div class="overlay" id="complete_overlay">
+  <div class="overlay-card">
+    <h2 id="complete_title">Mission Complete</h2>
+    <p id="complete_text"></p>
+    <button onclick="nextMission()">Next Mission</button>
+  </div>
+</div>
+
+<script>
+// ═══ AUDIO ENGINE ═══
+let audioStarted = false;
+let sfxEnabled = true;
+let musicEnabled = true;
+let masterVol = 0.6;
+
+// Tone.js instruments (lazy init — requires user gesture)
+let sfxSynth, mergeSynth, warpSynth, ambientSynth, ambientFilter, masterGain;
+
+function initAudio(){
+  if(audioStarted) return;
+  audioStarted = true;
+  Tone.start();
+
+  masterGain = new Tone.Gain(masterVol).toDestination();
+
+  // SFX synth — bright bell-like for pip tones
+  sfxSynth = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:0.005, decay:0.15, sustain:0, release:0.3}
+  }).connect(masterGain);
+
+  // Merge/cancel synth — softer, wider
+  mergeSynth = new Tone.Synth({
+    oscillator:{type:'triangle'},
+    envelope:{attack:0.01, decay:0.2, sustain:0.05, release:0.4}
+  }).connect(masterGain);
+
+  // Warp synth — noise sweep
+  warpSynth = new Tone.NoiseSynth({
+    noise:{type:'pink'},
+    envelope:{attack:0.1, decay:0.3, sustain:0.2, release:0.5}
+  }).connect(new Tone.Gain(0.15).connect(masterGain));
+
+  // Start music
+  if(musicEnabled) startAmbient();
+}
+
+// ═══ PITCH-TO-MAGNITUDE MAPPING ═══
+// Pentatonic scale starting from C4 — each number maps to a note
+// This avoids dissonance and creates pleasant sequences
+const NOTE_MAP = [
+  null,      // 0 unused
+  'C4',      // 1
+  'D4',      // 2
+  'E4',      // 3
+  'G4',      // 4
+  'A4',      // 5
+  'C5',      // 6
+  'D5',      // 7
+  'E5',      // 8
+  'G5',      // 9
+];
+
+// Play sequential pip tones for a quantity — one ding per pip, ascending
+function playPipTone(count, delay){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  const d = delay || 0;
+  for(let i = 0; i < count; i++){
+    const note = NOTE_MAP[Math.min(i+1, 9)] || 'C4';
+    setTimeout(()=>{
+      sfxSynth.triggerAttackRelease(note, '16n', Tone.now(), 0.3 + (i/count)*0.4);
+    }, d + i * 100);
+  }
+}
+
+// Play a single note for a specific value
+function playValueTone(val){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  const note = NOTE_MAP[Math.min(Math.max(val,1), 9)];
+  sfxSynth.triggerAttackRelease(note, '8n', Tone.now(), 0.5);
+}
+
+// Pellet load sound — ascending pitch based on chamber count
+function playPelletLoad(chamberIdx){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  const note = NOTE_MAP[Math.min(chamberIdx+1, 9)] || 'G5';
+  sfxSynth.triggerAttackRelease(note, '16n', Tone.now(), 0.5);
+}
+
+// Pellet arrive in bay (loading from relay)
+function playPelletArrive(idx){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  // Soft pluck, same pitch each time
+  sfxSynth.triggerAttackRelease('G3', '32n', Tone.now(), 0.15);
+}
+
+// Remove pellet from chamber
+function playPelletRemove(){
+  if(!audioStarted || !sfxEnabled || !mergeSynth) return;
+  mergeSynth.triggerAttackRelease('E3', '16n', Tone.now(), 0.3);
+}
+
+// Success — ascending arpeggio
+function playSuccess(){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  ['C4','E4','G4','C5'].forEach((n,i)=>{
+    setTimeout(()=>sfxSynth.triggerAttackRelease(n, '8n', Tone.now(), 0.5), i*120);
+  });
+}
+
+// Failure — descending dissonant
+function playFailure(){
+  if(!audioStarted || !sfxEnabled || !mergeSynth) return;
+  ['E4','C4'].forEach((n,i)=>{
+    setTimeout(()=>mergeSynth.triggerAttackRelease(n, '8n', Tone.now(), 0.4), i*150);
+  });
+}
+
+// Too many pellets
+function playOverload(){
+  if(!audioStarted || !sfxEnabled || !mergeSynth) return;
+  mergeSynth.triggerAttackRelease('A2', '4n', Tone.now(), 0.4);
+}
+
+// Warp / engine ignite
+function playWarp(){
+  if(!audioStarted || !sfxEnabled || !warpSynth) return;
+  warpSynth.triggerAttackRelease('4n', Tone.now(), 0.8);
+}
+
+// Docking complete
+function playDock(){
+  if(!audioStarted || !sfxEnabled || !sfxSynth) return;
+  ['G4','E4','C4'].forEach((n,i)=>{
+    setTimeout(()=>sfxSynth.triggerAttackRelease(n, '16n', Tone.now(), 0.3), i*100);
+  });
+}
+
+// ═══ AMBIENT MUSIC — Responsive & Playful ═══
+let ambientInterval = null;
+let musicLayer = null;
+let bassLoop = null;
+let melodyLoop = null;
+
+function startAmbient(){
+  if(!musicEnabled || !audioStarted) return;
+  stopAmbient();
+
+  // Bass — gentle rhythmic pulse, warm and inviting
+  const bassGain = new Tone.Gain(0.08).connect(masterGain);
+  const bassSynth = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:0.3, decay:0.8, sustain:0.2, release:1}
+  }).connect(bassGain);
+
+  // Melody — bright, playful arpeggiated patterns
+  const melodyGain = new Tone.Gain(0.06).connect(masterGain);
+  const melodySynth = new Tone.Synth({
+    oscillator:{type:'triangle'},
+    envelope:{attack:0.02, decay:0.3, sustain:0.1, release:0.5}
+  }).connect(new Tone.Filter(2000, 'lowpass').connect(melodyGain));
+
+  // Sparkle layer — occasional high twinkles
+  const sparkleGain = new Tone.Gain(0.04).connect(masterGain);
+  const sparkleSynth = new Tone.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:0.01, decay:0.15, sustain:0, release:0.3}
+  }).connect(sparkleGain);
+
+  // Chord progressions — bright, major-leaning, space-adventure feel
+  const progressions = [
+    {bass:'C3', melody:['C4','E4','G4','E4','C5','G4']},
+    {bass:'G2', melody:['G4','B4','D5','B4','G4','D5']},
+    {bass:'A2', melody:['A4','C5','E5','C5','A4','E5']},
+    {bass:'F2', melody:['F4','A4','C5','A4','F4','C5']},
+    {bass:'C3', melody:['E4','G4','C5','G4','E4','C5']},
+    {bass:'D3', melody:['D4','F4','A4','F4','D5','A4']},
+  ];
+
+  let chordIdx = 0;
+  let noteIdx = 0;
+
+  // Bass plays every 4 seconds
+  bassLoop = setInterval(()=>{
+    if(!musicEnabled) return;
+    const chord = progressions[chordIdx % progressions.length];
+    bassSynth.triggerAttackRelease(chord.bass, '2n', Tone.now());
+
+    // Advance chord based on game progress
+    if(noteIdx >= chord.melody.length){
+      chordIdx++;
+      noteIdx = 0;
+    }
+  }, 4000);
+
+  // Melody plays arpeggiated notes every 600ms
+  melodyLoop = setInterval(()=>{
+    if(!musicEnabled) return;
+    const chord = progressions[chordIdx % progressions.length];
+    const note = chord.melody[noteIdx % chord.melody.length];
+    melodySynth.triggerAttackRelease(note, '16n', Tone.now());
+    noteIdx++;
+
+    // Occasional sparkle
+    if(Math.random() < 0.15){
+      const sparkleNotes = ['C6','E6','G6','A5','D6'];
+      const sn = sparkleNotes[Math.floor(Math.random()*sparkleNotes.length)];
+      setTimeout(()=>{
+        sparkleSynth.triggerAttackRelease(sn, '32n', Tone.now(), 0.3 + Math.random()*0.3);
+      }, 200 + Math.random()*300);
+    }
+  }, 600);
+
+  musicLayer = {bassSynth, melodySynth, sparkleSynth, bassGain, melodyGain, sparkleGain};
+}
+
+// Boost music energy briefly on success
+function musicCelebrate(){
+  if(!musicLayer || !musicEnabled) return;
+  // Briefly brighten the melody
+  musicLayer.melodyGain.gain.rampTo(0.12, 0.1);
+  musicLayer.sparkleGain.gain.rampTo(0.08, 0.1);
+  setTimeout(()=>{
+    if(musicLayer){
+      musicLayer.melodyGain.gain.rampTo(0.06, 2);
+      musicLayer.sparkleGain.gain.rampTo(0.04, 2);
+    }
+  }, 3000);
+}
+
+function stopAmbient(){
+  if(bassLoop){ clearInterval(bassLoop); bassLoop = null; }
+  if(melodyLoop){ clearInterval(melodyLoop); melodyLoop = null; }
+  if(musicLayer){
+    try{
+      musicLayer.bassSynth.dispose();
+      musicLayer.melodySynth.dispose();
+      musicLayer.sparkleSynth.dispose();
+      musicLayer.bassGain.dispose();
+      musicLayer.melodyGain.dispose();
+      musicLayer.sparkleGain.dispose();
+    }catch(e){}
+    musicLayer = null;
+  }
+}
+
+// ═══ AUDIO CONTROLS ═══
+function toggleSFX(){
+  sfxEnabled = !sfxEnabled;
+  const btn = document.getElementById('sfx_btn');
+  btn.textContent = sfxEnabled ? '🔊' : '🔇';
+  btn.classList.toggle('active', sfxEnabled);
+  btn.classList.toggle('muted', !sfxEnabled);
+}
+
+function toggleMusic(){
+  musicEnabled = !musicEnabled;
+  const btn = document.getElementById('music_btn');
+  btn.classList.toggle('active', musicEnabled);
+  btn.classList.toggle('muted', !musicEnabled);
+  if(musicEnabled && audioStarted) startAmbient();
+  else stopAmbient();
+}
+
+function setVolume(val){
+  masterVol = val / 100;
+  if(masterGain) masterGain.gain.value = masterVol;
+}
+
+// ═══ STATE ═══
+let points=0, pointsGoal=50, currentWP=0, totalWP=8, missionActive=false;
+let needed=0, chamberCount=0, available=0, exerciseStart=0;
+const MAX_PTS=5, DECAY_SEC=30, MIN_PTS=1;
+
+// Stars
+const SC=document.getElementById('stars'), SX=SC.getContext('2d');
+let starParts=[], starSpeed=0.3, planetSize=10;
+
+// Relay stations (rendered on canvas)
+let relays=[];
+let currentRelayProgress=0; // 0-1, how close to next relay
+
+// Drag
+let dragging=null, ghostEl=document.getElementById('ghost');
+
+// ═══ STARFIELD ═══
+function resizeStars(){
+  const r=SC.parentElement.getBoundingClientRect();
+  SC.width=r.width*devicePixelRatio;SC.height=r.height*devicePixelRatio;
+  SC.style.width=r.width+'px';SC.style.height=r.height+'px';
+  SX.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+addEventListener('resize',resizeStars);resizeStars();
+
+function initStars(){
+  starParts=[];
+  const w=SC.width/devicePixelRatio,h=SC.height/devicePixelRatio;
+  for(let i=0;i<200;i++) starParts.push({x:(Math.random()-0.5)*w*2,y:(Math.random()-0.5)*h*2,z:Math.random()*1000+100,size:Math.random()*1.5+0.5});
+}
+initStars();
+
+function drawStars(){
+  const w=SC.width/devicePixelRatio,h=SC.height/devicePixelRatio,cx=w/2,cy=h/2;
+  SX.clearRect(0,0,w,h);
+  const bg=SX.createRadialGradient(cx,cy*0.7,0,cx,cy,h);
+  bg.addColorStop(0,'#060d18');bg.addColorStop(1,'#020510');
+  SX.fillStyle=bg;SX.fillRect(0,0,w,h);
+
+  starParts.forEach(s=>{
+    s.z-=starSpeed;
+    if(s.z<=1){s.z=1000;s.x=(Math.random()-0.5)*w*2;s.y=(Math.random()-0.5)*h*2}
+    const sx=cx+(s.x/s.z)*200,sy=cy+(s.y/s.z)*200;
+    const sz=Math.max(0.3,s.size*(1-s.z/1000)*2),sa=Math.min(1,(1-s.z/1000)*1.5);
+    if(sx<0||sx>w||sy<0||sy>h)return;
+
+    if(starSpeed>2){
+      const streak=Math.min(starSpeed*2,30),dx=(s.x/s.z)*200,dy=(s.y/s.z)*200,len=Math.sqrt(dx*dx+dy*dy);
+      if(len>0){SX.strokeStyle=`rgba(200,220,255,${sa*0.4})`;SX.lineWidth=sz*0.5;SX.beginPath();SX.moveTo(sx,sy);SX.lineTo(sx-dx/len*streak,sy-dy/len*streak);SX.stroke()}
+    }
+    SX.fillStyle=`rgba(220,235,255,${sa})`;SX.beginPath();SX.arc(sx,sy,sz,0,Math.PI*2);SX.fill();
+  });
+
+  // Draw planet on canvas (behind relay stations)
+  drawPlanetOnCanvas(w, h, cx, cy);
+
+  // Draw relay station ahead (in front of planet)
+  drawRelay(w,h,cx,cy);
+}
+
+function drawRelay(w,h,cx,cy){
+  const prog = currentRelayProgress;
+  if(prog <= 0) return;
+
+  // Phase 1 (0-0.8): approaching — station grows, stays roughly centered
+  // Phase 2 (0.8-1.5): flyby — station accelerates growth, drops below center, zooms overhead
+  let size, rx, ry, alpha;
+
+  if(prog <= 0.8){
+    // Approaching
+    size = 8 + prog * 50;
+    rx = cx;
+    ry = cy * 0.45 - prog * cy * 0.05;
+    alpha = Math.min(1, prog * 2.5);
+  } else {
+    // Flyby — exponential growth, slides downward
+    const flyProg = (prog - 0.8) / 0.7; // 0 to 1 over the flyby phase
+    const ease = flyProg * flyProg; // accelerating
+    size = 48 + ease * 300; // grows from ~48 to ~348
+    rx = cx + (flyProg > 0.3 ? (flyProg - 0.3) * 40 * Math.sin(flyProg * 2) : 0); // slight drift
+    ry = cy * 0.4 + ease * cy * 0.8; // drops down
+    alpha = Math.max(0, 1 - flyProg * 1.2); // fades out as it passes
+  }
+
+  if(alpha <= 0) return;
+
+  const t = Date.now() / 1000;
+
+  SX.save();
+  SX.globalAlpha = alpha;
+  SX.translate(rx, ry);
+
+  // Slow rotation for the whole station
+  SX.rotate(t * 0.15);
+
+  // ── SOLAR PANEL ARMS (4 arms extending outward) ──
+  for(let arm = 0; arm < 4; arm++){
+    SX.save();
+    SX.rotate(Math.PI / 2 * arm);
+
+    // Arm strut
+    SX.strokeStyle = `rgba(120,140,170,${0.4+Math.min(prog,0.8)*0.25})`;
+    SX.lineWidth = Math.max(1, size * 0.04);
+    SX.beginPath();
+    SX.moveTo(size*0.15, 0);
+    SX.lineTo(size*0.75, 0);
+    SX.stroke();
+
+    // Solar panel
+    const panelW = size * 0.35;
+    const panelH = size * 0.12;
+    const panelX = size * 0.75;
+
+    SX.fillStyle = `rgba(30,50,80,${0.5+Math.min(prog,0.8)*0.25})`;
+    SX.fillRect(panelX - panelW/2, -panelH/2, panelW, panelH);
+
+    // Panel cells
+    SX.strokeStyle = `rgba(80,140,220,${0.2+Math.min(prog,0.8)*0.15})`;
+    SX.lineWidth = 0.5;
+    const cellCols = 4, cellRows = 2;
+    for(let c = 0; c <= cellCols; c++){
+      const lx = panelX - panelW/2 + (panelW/cellCols)*c;
+      SX.beginPath(); SX.moveTo(lx, -panelH/2); SX.lineTo(lx, panelH/2); SX.stroke();
+    }
+    for(let r = 0; r <= cellRows; r++){
+      const ly = -panelH/2 + (panelH/cellRows)*r;
+      SX.beginPath(); SX.moveTo(panelX-panelW/2, ly); SX.lineTo(panelX+panelW/2, ly); SX.stroke();
+    }
+
+    SX.fillStyle = `rgba(60,120,200,${0.08+Math.min(prog,0.8)*0.05})`;
+    SX.fillRect(panelX - panelW/2, -panelH/2, panelW, panelH);
+
+    SX.strokeStyle = `rgba(100,160,230,${0.3+Math.min(prog,0.8)*0.15})`;
+    SX.lineWidth = 0.8;
+    SX.strokeRect(panelX - panelW/2, -panelH/2, panelW, panelH);
+
+    SX.restore();
+  }
+
+  // ── DOCKING RING ──
+  SX.strokeStyle = `rgba(150,170,200,${0.2+Math.min(prog,0.8)*0.15})`;
+  SX.lineWidth = Math.max(1, size * 0.05);
+  SX.beginPath();
+  SX.arc(0, 0, size * 0.32, 0, Math.PI * 2);
+  SX.stroke();
+
+  // Docking port indicators
+  for(let d = 0; d < 4; d++){
+    const da = Math.PI/2*d + Math.PI/4;
+    const dx = Math.cos(da) * size * 0.32;
+    const dy = Math.sin(da) * size * 0.32;
+    const blink = Math.sin(t * 3 + d * 1.5) > 0;
+    SX.fillStyle = blink ? `rgba(58,255,138,${0.6+Math.min(prog,0.8)*0.2})` : `rgba(58,200,255,${0.2})`;
+    SX.beginPath(); SX.arc(dx, dy, Math.max(1, size*0.03), 0, Math.PI*2); SX.fill();
+  }
+
+  // ── FUEL TANKS ──
+  for(let side = -1; side <= 1; side += 2){
+    const tankX = side * size * 0.18;
+    const tankW = size * 0.08;
+    const tankH = size * 0.22;
+
+    SX.fillStyle = `rgba(80,60,40,${0.3+Math.min(prog,0.8)*0.2})`;
+    SX.beginPath();
+    SX.ellipse(tankX, 0, tankW/2, tankH/2, 0, 0, Math.PI*2);
+    SX.fill();
+
+    SX.strokeStyle = `rgba(180,140,80,${0.25+Math.min(prog,0.8)*0.15})`;
+    SX.lineWidth = 0.6;
+    SX.stroke();
+
+    SX.strokeStyle = `rgba(200,160,80,${0.15})`;
+    SX.beginPath(); SX.moveTo(tankX-tankW/2, -tankH*0.15); SX.lineTo(tankX+tankW/2, -tankH*0.15); SX.stroke();
+    SX.beginPath(); SX.moveTo(tankX-tankW/2, tankH*0.15); SX.lineTo(tankX+tankW/2, tankH*0.15); SX.stroke();
+  }
+
+  // ── CENTRAL HUB ──
+  const hubGlow = SX.createRadialGradient(0, 0, 0, 0, 0, size*0.2);
+  hubGlow.addColorStop(0, `rgba(58,200,255,${0.1+Math.min(prog,0.8)*0.1})`);
+  hubGlow.addColorStop(1, 'transparent');
+  SX.fillStyle = hubGlow;
+  SX.beginPath(); SX.arc(0, 0, size*0.2, 0, Math.PI*2); SX.fill();
+
+  const hubGrd = SX.createRadialGradient(-size*0.03, -size*0.03, 0, 0, 0, size*0.12);
+  hubGrd.addColorStop(0, `rgba(80,100,130,${0.6+Math.min(prog,0.8)*0.2})`);
+  hubGrd.addColorStop(1, `rgba(30,45,65,${0.5+Math.min(prog,0.8)*0.2})`);
+  SX.fillStyle = hubGrd;
+  SX.beginPath(); SX.arc(0, 0, size*0.12, 0, Math.PI*2); SX.fill();
+
+  SX.strokeStyle = `rgba(120,160,200,${0.3+Math.min(prog,0.8)*0.2})`;
+  SX.lineWidth = Math.max(0.5, size*0.02);
+  SX.stroke();
+
+  SX.fillStyle = `rgba(58,200,255,${0.4+Math.sin(t*2)*0.2})`;
+  SX.beginPath(); SX.arc(0, 0, size*0.04, 0, Math.PI*2); SX.fill();
+
+  SX.restore();
+
+  // Label (not rotated)
+  if(prog <= 0.9){
+    SX.fillStyle=`rgba(58,200,255,${alpha*0.5})`;
+    SX.font=`${Math.max(7,size*0.2)}px "Orbitron",monospace`;SX.textAlign='center';
+    SX.fillText(`RELAY ${currentWP+1}`, rx, ry + size*0.95 + 14);
+  }
+}
+
+// ═══ EXERCISES ═══
+function generateExercise(){
+  needed = Math.floor(Math.random()*6)+2; // 2-7
+  available = needed + Math.floor(Math.random()*4)+2;
+  chamberCount = 0;
+  currentRelayProgress = 0.15; // relay just appeared
+
+  document.getElementById('fuel_target').textContent = needed;
+  document.getElementById('feedback').innerHTML = '&nbsp;';
+  document.getElementById('chamber').className = 'chamber-zone';
+
+  // Start with empty bay — pellets load after docking
+  document.getElementById('pellet_area').innerHTML = '';
+  renderChamber();
+  document.getElementById('refuel_msg').textContent = `Approaching Relay ${currentWP+1}...`;
+
+  // Animate approach, then load pellets on arrival
+  animateRelayApproach(()=>{
+    // Docked — now load pellets one by one
+    document.getElementById('refuel_msg').textContent = `Loading ${available} fuel pellets...`;
+    loadPelletsSequentially(()=>{
+      // All loaded — start the exercise timer
+      exerciseStart = Date.now();
+      document.getElementById('refuel_msg').textContent = `Relay ${currentWP+1} loaded ${available} pellets. Load exactly ${needed} to jump.`;
+    });
+  });
+}
+
+function animateRelayApproach(onDocked){
+  const target = 0.6;
+  const startSpeed = 3;
+  const startTime = Date.now();
+  const approachDuration = 2500;
+
+  starSpeed = startSpeed;
+  document.getElementById('speed_val').textContent = '3.2 km/s';
+
+  const step = ()=>{
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(1, elapsed / approachDuration);
+    const ease = 1 - (1 - t) * (1 - t);
+
+    currentRelayProgress = 0.15 + ease * (target - 0.15);
+    starSpeed = startSpeed * (1 - ease * 0.9);
+
+    const displaySpeed = starSpeed * 1.1;
+    if(displaySpeed > 0.2){
+      document.getElementById('speed_val').textContent = displaySpeed.toFixed(1) + ' km/s';
+    } else {
+      document.getElementById('speed_val').textContent = 'Docking...';
+    }
+
+    if(t < 1){
+      requestAnimationFrame(step);
+    } else {
+      starSpeed = 0.3;
+      document.getElementById('speed_val').textContent = 'Docked';
+      playDock();
+      if(onDocked) onDocked();
+    }
+  };
+  step();
+}
+
+function loadPelletsSequentially(onComplete){
+  const area = document.getElementById('pellet_area');
+  let loaded = 0;
+  const delay = 150; // ms between each pellet
+
+  function loadNext(){
+    if(loaded >= available){
+      if(onComplete) onComplete();
+      return;
+    }
+
+    const p = document.createElement('div');
+    p.className = 'pellet pellet-loading';
+    p.dataset.idx = loaded;
+    p.addEventListener('mousedown', startDrag);
+    p.addEventListener('touchstart', startDrag, {passive:false});
+    area.appendChild(p);
+
+    // Sound — soft pluck for each arriving pellet
+    playPelletArrive(loaded);
+
+    // Trigger the pop-in animation
+    requestAnimationFrame(()=>{
+      p.classList.remove('pellet-loading');
+      p.classList.add('pellet-loaded');
+    });
+
+    loaded++;
+    setTimeout(loadNext, delay);
+  }
+
+  loadNext();
+}
+
+function renderChamber(){
+  const ch=document.getElementById('chamber');
+  ch.innerHTML='';
+  for(let i=0;i<chamberCount;i++){
+    const p=document.createElement('div');
+    p.className='chamber-pellet';
+    p.addEventListener('click',()=>removePellet(i));
+    p.title='Click to remove';
+    ch.appendChild(p);
+  }
+}
+
+// ═══ DRAG ═══
+function startDrag(e){
+  if(!missionActive)return;
+  e.preventDefault();
+  const pel=e.currentTarget;
+  if(pel.classList.contains('used'))return;
+  dragging=pel;pel.classList.add('dragging');
+  ghostEl.style.display='block';
+  const pos=getPos(e);ghostEl.style.left=pos.x+'px';ghostEl.style.top=pos.y+'px';
+  document.addEventListener('mousemove',onDrag);document.addEventListener('mouseup',endDrag);
+  document.addEventListener('touchmove',onDrag,{passive:false});document.addEventListener('touchend',endDrag);
+}
+function onDrag(e){
+  e.preventDefault();const pos=getPos(e);
+  ghostEl.style.left=pos.x+'px';ghostEl.style.top=pos.y+'px';
+  const ch=document.getElementById('chamber'),cr=ch.getBoundingClientRect();
+  const over=pos.x>cr.left&&pos.x<cr.right&&pos.y>cr.top&&pos.y<cr.bottom;
+  ch.classList.toggle('hover',over);
+}
+function endDrag(e){
+  if(!dragging)return;
+  const pos=getPos(e);ghostEl.style.display='none';
+  const ch=document.getElementById('chamber'),cr=ch.getBoundingClientRect();
+  const over=pos.x>cr.left&&pos.x<cr.right&&pos.y>cr.top&&pos.y<cr.bottom;
+  ch.classList.remove('hover');
+
+  if(over){
+    chamberCount++;
+    dragging.classList.remove('dragging','pellet-loaded','pellet-loading');
+    dragging.style.animation='none';
+    dragging.classList.add('used');
+    renderChamber();
+    playPelletLoad(chamberCount); // ascending tone based on count
+    document.getElementById('feedback').innerHTML='&nbsp;';
+    ch.className='chamber-zone';
+  } else {
+    dragging.classList.remove('dragging');
+  }
+  dragging=null;
+  document.removeEventListener('mousemove',onDrag);document.removeEventListener('mouseup',endDrag);
+  document.removeEventListener('touchmove',onDrag);document.removeEventListener('touchend',endDrag);
+}
+
+function removePellet(idx){
+  if(!missionActive)return;
+  chamberCount = Math.max(0, chamberCount-1);
+  playPelletRemove();
+  // Restore one pellet in the bay
+  const used = document.querySelectorAll('.pellet.used');
+  if(used.length>0){
+    const last=used[used.length-1];
+    last.classList.remove('used');
+    last.style.opacity='';last.style.transform='';last.style.pointerEvents='';last.style.animation='';
+  }
+  renderChamber();
+  document.getElementById('feedback').innerHTML='&nbsp;';
+  document.getElementById('chamber').className='chamber-zone';
+}
+
+function getPos(e){const t=e.touches?e.touches[0]||e.changedTouches[0]:e;return{x:t.clientX,y:t.clientY}}
+
+// ═══ IGNITE ═══
+function attemptIgnite(){
+  if(!missionActive||chamberCount===0)return;
+  const ch=document.getElementById('chamber');
+  const fb=document.getElementById('feedback');
+
+  if(chamberCount===needed){
+    // CORRECT
+    ch.className='chamber-zone correct';
+    fb.textContent='\u2713 Fuel matched \u2014 igniting!';fb.style.color='var(--green)';
+    playSuccess();
+    musicCelebrate();
+    document.getElementById('ignite_btn').classList.add('firing');
+    setTimeout(()=>{
+      document.getElementById('ignite_btn').classList.remove('firing');
+      playWarp();
+      completeExercise();
+    },800);
+  } else if(chamberCount<needed){
+    ch.className='chamber-zone wrong';
+    fb.textContent=`Not enough fuel \u2014 need ${needed-chamberCount} more`;
+    fb.style.color='var(--red)';
+    playFailure();
+    setTimeout(()=>{ch.className='chamber-zone'},500);
+  } else {
+    ch.className='chamber-zone wrong';
+    fb.textContent=`Too much fuel \u2014 remove ${chamberCount-needed}`;
+    fb.style.color='var(--red)';
+    playOverload();
+    setTimeout(()=>{ch.className='chamber-zone'},500);
+  }
+}
+
+// ═══ SCORING ═══
+function completeExercise(){
+  const elapsed=(Date.now()-exerciseStart)/1000;
+  const decay=Math.min(1,elapsed/DECAY_SEC);
+  const earned=Math.max(MIN_PTS,Math.round(MAX_PTS-(MAX_PTS-MIN_PTS)*decay));
+
+  points+=earned;
+  document.getElementById('pts').textContent=points;
+  document.getElementById('last_score').textContent='+'+earned+' pts';
+  document.getElementById('last_score').style.color=earned>=4?'var(--green)':earned>=2?'var(--orange)':'var(--text-dim)';
+  document.getElementById('level_fill').style.width=(Math.min(1,points/pointsGoal)*100)+'%';
+
+  currentWP++;
+  document.getElementById('wp_label').textContent=(currentWP)+' of '+totalWP;
+
+  triggerWarp();
+
+  if(points>=pointsGoal){
+    setTimeout(completeMission,2500);
+  } else {
+    setTimeout(()=>{starSpeed=0.3;generateExercise()},2200);
+  }
+}
+
+function triggerWarp(){
+  starSpeed=18;
+  const flash=document.getElementById('warp_flash');
+  flash.classList.add('flash');setTimeout(()=>flash.classList.remove('flash'),150);
+
+  // Smoothly animate planet growth
+  const targetSize = Math.min(160, planetSize + 8 + points * 0.5);
+  const startSize = planetSize;
+  const growStart = Date.now();
+  const growDuration = 1500;
+
+  function animGrow(){
+    const elapsed = Date.now() - growStart;
+    const t = Math.min(1, elapsed / growDuration);
+    const ease = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; // ease in-out
+    planetSize = startSize + (targetSize - startSize) * ease;
+    const pl = document.getElementById('planet');
+    pl.style.width = planetSize+'px'; pl.style.height = planetSize+'px';
+    if(t < 1) requestAnimationFrame(animGrow);
+  }
+  animGrow();
+
+  document.getElementById('speed_val').textContent=(Math.random()*5+8).toFixed(1)+' km/s';
+  document.getElementById('refuel_msg').textContent='Warping to next relay station...';
+
+  // Animate the relay station flyby — zooms overhead and fades
+  const flybyStart = Date.now();
+  const flybyDuration = 1200;
+  const startProg = currentRelayProgress;
+  function animFlyby(){
+    const elapsed = Date.now() - flybyStart;
+    const t = Math.min(1, elapsed / flybyDuration);
+    const ease = t * t;
+    currentRelayProgress = startProg + ease * 1.0;
+    if(t < 1) requestAnimationFrame(animFlyby);
+  }
+  animFlyby();
+
+  // After warp, slow down and reset for next station
+  setTimeout(()=>{
+    starSpeed=0.3;currentRelayProgress=0;
+    document.getElementById('speed_val').textContent='Docked';
+  },1800);
+}
+
+// ═══ MISSION ═══
+function startMission(){
+  initAudio();
+  document.getElementById('intro_overlay').classList.remove('show');
+  missionActive=true;generateExercise();
+}
+function completeMission(){
+  missionActive=false;
+  document.getElementById('complete_title').textContent='Kepler Station Reached!';
+  document.getElementById('complete_text').textContent=`Outstanding, Cadet. You reached Kepler Station with ${points} points across ${currentWP} relay stations. Your fueling accuracy has been logged. Preparing next assignment.`;
+  document.getElementById('complete_overlay').classList.add('show');
+  planetSize=200;
+  const pl=document.getElementById('planet');pl.style.width='200px';pl.style.height='200px';
+}
+function nextMission(){
+  document.getElementById('complete_overlay').classList.remove('show');
+  points=0;currentWP=0;planetSize=10;
+  document.getElementById('pts').textContent='0';
+  document.getElementById('level_fill').style.width='0%';
+  document.getElementById('wp_label').textContent='1 of '+totalWP;
+  const pl=document.getElementById('planet');pl.style.width='10px';pl.style.height='10px';
+  missionActive=true;generateExercise();
+}
+
+// ═══ RINGED PLANET ON STARFIELD CANVAS ═══
+function drawPlanetOnCanvas(w, h, cx, cy){
+  const R = planetSize / 2;
+  if(R < 3) return;
+
+  const px = cx;
+  const py = h * 0.4 + (1 - Math.min(planetSize/200, 1)) * h * 0.15;
+
+  // Atmosphere glow
+  const atmo = SX.createRadialGradient(px, py, R*0.92, px, py, R*1.35);
+  atmo.addColorStop(0, 'rgba(180,160,200,0.15)');
+  atmo.addColorStop(1, 'transparent');
+  SX.fillStyle = atmo;
+  SX.beginPath(); SX.arc(px, py, R*1.35, 0, Math.PI*2); SX.fill();
+
+  // Rings BEHIND planet
+  SX.save();
+  SX.translate(px, py);
+  SX.scale(1, 0.3);
+  for(let r=0;r<3;r++){
+    const rr = R*1.3 + r * R*0.1;
+    SX.strokeStyle = `rgba(180,160,140,${0.2-r*0.05})`;
+    SX.lineWidth = Math.max(1, R*0.06);
+    SX.beginPath(); SX.arc(0,0,rr,0,Math.PI); SX.stroke();
+  }
+  SX.restore();
+
+  // Planet body
+  SX.save();
+  SX.beginPath(); SX.arc(px,py,R,0,Math.PI*2); SX.clip();
+
+  const base = SX.createRadialGradient(px-R*0.2, py-R*0.25, R*0.1, px, py, R*1.1);
+  base.addColorStop(0, '#c8b8d8');
+  base.addColorStop(0.4, '#9888a8');
+  base.addColorStop(0.8, '#584878');
+  base.addColorStop(1, '#281838');
+  SX.fillStyle = base;
+  SX.fillRect(px-R, py-R, R*2, R*2);
+
+  for(let i=0;i<8;i++){
+    const y = py - R + i*(R*2/8);
+    SX.fillStyle = i%2===0 ? 'rgba(200,180,220,0.07)' : 'rgba(80,60,100,0.08)';
+    SX.fillRect(px-R, y, R*2, R*2/8);
+  }
+
+  const spec = SX.createRadialGradient(px-R*0.3, py-R*0.35, R*0.02, px-R*0.2, py-R*0.25, R*0.5);
+  spec.addColorStop(0, 'rgba(255,240,255,0.3)');
+  spec.addColorStop(1, 'transparent');
+  SX.fillStyle = spec;
+  SX.fillRect(px-R, py-R, R*2, R*2);
+
+  const shadow = SX.createRadialGradient(px+R*0.35, py+R*0.35, R*0.3, px+R*0.2, py+R*0.2, R*1.1);
+  shadow.addColorStop(0, 'transparent');
+  shadow.addColorStop(0.5, 'transparent');
+  shadow.addColorStop(1, 'rgba(0,0,10,0.55)');
+  SX.fillStyle = shadow;
+  SX.fillRect(px-R, py-R, R*2, R*2);
+
+  SX.fillStyle = 'rgba(0,0,0,0.1)';
+  SX.save();
+  SX.translate(px, py-R*0.15);
+  SX.scale(1, 0.1);
+  SX.fillRect(-R, -R*0.3, R*2, R*0.6);
+  SX.restore();
+
+  SX.restore();
+
+  // Rings IN FRONT
+  SX.save();
+  SX.translate(px, py);
+  SX.scale(1, 0.3);
+  for(let r=0;r<3;r++){
+    const rr = R*1.3 + r * R*0.1;
+    SX.strokeStyle = `rgba(200,180,160,${0.25-r*0.06})`;
+    SX.lineWidth = Math.max(1, R*0.06);
+    SX.beginPath(); SX.arc(0,0,rr,Math.PI,Math.PI*2); SX.stroke();
+  }
+  SX.restore();
+
+  // ═══ KEPLER STATION — orbital ring station ═══
+  drawKeplerStation(px, py, R);
+
+  // Update HUD
+  updateHUD();
+}
+
+function drawKeplerStation(px, py, planetR){
+  // Station only visible when planet is large enough
+  if(planetR < 15) return;
+
+  const t = Date.now() / 1000;
+  const visibility = Math.min(1, (planetR - 15) / 35);
+
+  // Station grows MUCH larger than the planet as you approach
+  // At early visibility it's tiny (far away), at full visibility it dominates
+  const progress = Math.min(1, (planetR - 15) / 65); // 0 to 1 as planet grows
+  const stationSize = 8 + progress * progress * 120; // accelerating growth — tiny dot to massive station
+
+  // Position: slightly above planet center, moving upward as it grows
+  // (station is in orbit ABOVE the planet from our perspective)
+  const sx = px;
+  const sy = py - planetR * 0.5 - stationSize * 0.3;
+
+  SX.save();
+  SX.globalAlpha = visibility;
+  SX.translate(sx, sy);
+
+  // Slow spin — artificial gravity rotation
+  const spinAngle = t * 0.08; // very slow rotation
+  SX.rotate(spinAngle);
+
+  const ss = stationSize;
+
+  // ── MAIN RING (toroidal habitat ring) ──
+  SX.save();
+  SX.scale(1, 0.35); // flatten to show ring from slight angle
+
+  // Ring body — thicker for larger station
+  const ringThickness = Math.max(2, ss * 0.1);
+  SX.strokeStyle = `rgba(160,180,210,${0.5 * visibility})`;
+  SX.lineWidth = ringThickness;
+  SX.beginPath(); SX.arc(0, 0, ss, 0, Math.PI*2); SX.stroke();
+
+  // Ring inner edge highlight
+  SX.strokeStyle = `rgba(220,230,240,${0.12 * visibility})`;
+  SX.lineWidth = Math.max(0.5, ringThickness * 0.3);
+  SX.beginPath(); SX.arc(0, 0, ss - ringThickness/2, 0, Math.PI*2); SX.stroke();
+
+  // Ring outer edge
+  SX.strokeStyle = `rgba(100,120,150,${0.2 * visibility})`;
+  SX.lineWidth = 0.5;
+  SX.beginPath(); SX.arc(0, 0, ss + ringThickness/2, 0, Math.PI*2); SX.stroke();
+
+  // Habitat windows — dots along the ring (only when large enough)
+  if(ss > 20){
+    const windowCount = Math.min(24, Math.floor(ss * 0.4));
+    for(let w = 0; w < windowCount; w++){
+      const wa = Math.PI * 2 * w / windowCount;
+      const wx = Math.cos(wa) * ss;
+      const wy = Math.sin(wa) * ss;
+      const windowGlow = Math.sin(t * 0.8 + w * 0.5) * 0.15 + 0.25;
+      SX.fillStyle = `rgba(255,220,150,${windowGlow * visibility})`;
+      SX.beginPath(); SX.arc(wx, wy, Math.max(0.8, ss*0.02), 0, Math.PI*2); SX.fill();
+    }
+  }
+
+  SX.restore();
+
+  // ── SPOKES (connecting hub to ring — rotate with the station) ──
+  const spokeCount = ss > 15 ? 6 : 4;
+  for(let s = 0; s < spokeCount; s++){
+    const sa = Math.PI * 2 * s / spokeCount;
+    SX.strokeStyle = `rgba(140,160,190,${0.3 * visibility})`;
+    SX.lineWidth = Math.max(0.5, ss * 0.015);
+    SX.beginPath();
+    const hubEnd = ss * 0.15;
+    const ringEnd = ss * 0.9;
+    SX.moveTo(Math.cos(sa) * hubEnd, Math.sin(sa) * hubEnd * 0.35);
+    SX.lineTo(Math.cos(sa) * ringEnd, Math.sin(sa) * ringEnd * 0.35);
+    SX.stroke();
+  }
+
+  // ── CENTRAL HUB (command module — doesn't spin as fast visually) ──
+  const hubR = Math.max(3, ss * 0.18);
+  const hubGrd = SX.createRadialGradient(-hubR*0.25, -hubR*0.25, 0, 0, 0, hubR);
+  hubGrd.addColorStop(0, `rgba(120,150,190,${0.6 * visibility})`);
+  hubGrd.addColorStop(0.6, `rgba(60,80,110,${0.5 * visibility})`);
+  hubGrd.addColorStop(1, `rgba(20,35,55,${0.4 * visibility})`);
+  SX.fillStyle = hubGrd;
+  SX.beginPath(); SX.arc(0, 0, hubR, 0, Math.PI*2); SX.fill();
+
+  // Hub edge
+  SX.strokeStyle = `rgba(160,180,210,${0.3 * visibility})`;
+  SX.lineWidth = Math.max(0.5, hubR * 0.08);
+  SX.stroke();
+
+  // Hub window/beacon
+  const beaconPulse = 0.5 + Math.sin(t * 1.5) * 0.3;
+  SX.fillStyle = `rgba(58,200,255,${beaconPulse * visibility})`;
+  SX.beginPath(); SX.arc(0, 0, hubR * 0.3, 0, Math.PI*2); SX.fill();
+
+  // Beacon glow
+  SX.fillStyle = `rgba(58,200,255,${beaconPulse * 0.15 * visibility})`;
+  SX.beginPath(); SX.arc(0, 0, hubR * 0.6, 0, Math.PI*2); SX.fill();
+
+  // ── DOCKING ARMS (extending outward from ring) ──
+  for(let d = 0; d < 2; d++){
+    const da = d * Math.PI + Math.PI/2; // top and bottom
+    const armLen = ss * 0.35;
+    const ax = Math.cos(da) * (ss + armLen * 0.5);
+    const ay = Math.sin(da) * (ss + armLen * 0.5) * 0.35;
+    const ringX = Math.cos(da) * ss;
+    const ringY = Math.sin(da) * ss * 0.35;
+
+    SX.strokeStyle = `rgba(120,140,170,${0.25 * visibility})`;
+    SX.lineWidth = Math.max(0.5, ss * 0.018);
+    SX.beginPath();
+    SX.moveTo(ringX, ringY);
+    SX.lineTo(ax, ay);
+    SX.stroke();
+
+    // Docking light
+    const blink = Math.sin(t * 2 + d * 3) > 0.2;
+    SX.fillStyle = blink ? `rgba(58,255,138,${0.7 * visibility})` : `rgba(255,80,60,${0.3 * visibility})`;
+    SX.beginPath(); SX.arc(ax, ay, Math.max(1.2, ss*0.025), 0, Math.PI*2); SX.fill();
+    // Light glow
+    if(blink){
+      SX.fillStyle = `rgba(58,255,138,${0.1 * visibility})`;
+      SX.beginPath(); SX.arc(ax, ay, Math.max(3, ss*0.06), 0, Math.PI*2); SX.fill();
+    }
+  }
+
+  // ── SOLAR ARRAYS (large panels, rotate with station) ──
+  if(ss > 10){
+    for(let side = -1; side <= 1; side += 2){
+      const panelAngle = side * Math.PI / 2;
+      const panelDist = ss * 1.15;
+      const panelX = Math.cos(panelAngle) * panelDist;
+      const panelY = Math.sin(panelAngle) * panelDist * 0.35;
+      const panelW = ss * 0.45;
+      const panelH = ss * 0.12;
+
+      SX.save();
+      SX.translate(panelX, panelY);
+
+      SX.fillStyle = `rgba(25,45,75,${0.35 * visibility})`;
+      SX.fillRect(-panelW/2, -panelH/2, panelW, panelH);
+
+      // Panel sheen
+      SX.fillStyle = `rgba(60,120,200,${0.06 * visibility})`;
+      SX.fillRect(-panelW/2, -panelH/2, panelW, panelH);
+
+      SX.strokeStyle = `rgba(80,140,220,${0.2 * visibility})`;
+      SX.lineWidth = 0.5;
+      SX.strokeRect(-panelW/2, -panelH/2, panelW, panelH);
+
+      // Cell grid
+      const cells = Math.max(2, Math.floor(panelW / 8));
+      for(let c = 1; c < cells; c++){
+        const lx = -panelW/2 + (panelW/cells)*c;
+        SX.beginPath(); SX.moveTo(lx, -panelH/2); SX.lineTo(lx, panelH/2); SX.stroke();
+      }
+      SX.beginPath(); SX.moveTo(-panelW/2, 0); SX.lineTo(panelW/2, 0); SX.stroke();
+
+      SX.restore();
+    }
+  }
+
+  SX.restore(); // undo spin rotation
+
+  // ── Station name (drawn AFTER restore so it doesn't spin) ──
+  if(ss > 14){
+    SX.fillStyle = `rgba(58,200,255,${0.35 * visibility})`;
+    SX.font = `600 ${Math.max(7, ss*0.1)}px Orbitron`;
+    SX.textAlign = 'center';
+    SX.fillText('KEPLER STATION', sx, sy + ss * 0.35 + ss * 0.12 + 12);
+  }
+}
+
+function updateHUD(){
+  const totalRelays = 8;
+  const remaining = totalRelays - currentWP;
+  const distEl = document.getElementById('hud_distance');
+  if(distEl){
+    if(remaining > 0){
+      const dist = (remaining * 2.4).toFixed(1);
+      distEl.textContent = 'Kepler Station: ' + dist + ' AU';
+    } else {
+      distEl.textContent = 'Kepler Station: Arriving';
+    }
+  }
+}
+
+// ═══ LOOP ═══
+function loop(){drawStars();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
